@@ -1,0 +1,161 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum Role {
+  ADMIN
+  MANAGER
+  TEAM_MEMBER
+}
+
+enum RecurrenceUnit {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum EngagementStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  READY_FOR_REVIEW
+  CHANGES_REQUESTED
+  WAITING_FOR_CLIENT
+  COMPLETED
+}
+
+
+
+model User {
+  id              String    @id         @default(uuid())
+  name            String
+  email           String    @unique()
+  passwordHash    String 
+  role            Role
+  createdAt       DateTime   @default(now())
+
+  assignedTasks   Task[]          @relation("AssignedTo")
+  reviewedTasks   Task[]          @relation("ReviewedBy")
+  taskHistory     TaskHistory[]   @relation("ChangedBy") 
+}
+
+
+model Client {
+  id              String      @id     @default(uuid())
+  name            String      
+  createdAt       DateTime    @default(now())
+
+  engagements     Engagement[]
+}
+
+
+model ServiceType {
+  id               String       @id     @default(uuid())
+  name             String       @unique
+  isRecurring      Boolean
+  recurrenceunit   RecurrenceUnit?
+
+  taskTemplates    TaskTemplate[]
+  engagements      Engagement[] 
+}
+
+
+model TaskTemplate {
+  id                String      @id     @default(uuid())
+  serviceTypeId     String 
+  serviceType       ServiceType  @relation(fields: [serviceTypeId], references: [id])
+  title             String
+  order             Int
+  defaultDueOffsetDays  Int
+
+  tasks             Task[]
+
+  @@index([serviceTypeId])
+}
+
+
+model Engagement {
+  id                String      @id      @default(uuid())
+  
+  clientId          String
+  client            Client      @relation(fields: [clientId], references: [id])
+
+  serviceTypeId     String 
+  serviceType       ServiceType @relation(fields: [serviceTypeId], references: [id])
+
+  periodStart       DateTime
+  periodEnd         DateTime
+
+  status            EngagementStatus  @default(ACTIVE)
+  createdAt         DateTime          @default(now())
+
+  tasks             Task[]
+
+  @@unique([clientId, serviceTypeId, periodStart])
+  @@index([clientId])
+}
+
+
+model Task {
+  id                String      @id       @default(uuid())
+  
+  engagementId      String
+  engagement        Engagement  @relation(fields: [engagementId], references: [id])
+
+  templateId        String?
+  template          TaskTemplate?   @relation(fields: [templateId], references: [id])
+
+  title             String
+  status            TaskStatus      @default(NOT_STARTED)
+
+  assignedToId      String?
+  assignedTo        User?           @relation("AssignedTo", fields: [assignedToId], references: [id])
+
+  reviewedById      String?
+  reviewedBy        User?           @relation("ReviewedBy", fields: [reviewedById], references: [id])
+
+  dueDate           DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  history           TaskHistory[]
+
+  @@index([assignedToId, status])
+  @@index([dueDate])
+  @@index([engagementId])
+}
+
+
+model TaskHistory {
+  id                String        @id     @default(uuid())
+  
+  taskId            String
+  task              Task          @relation(fields: [taskId], references: [id])
+
+  fromStatus        TaskStatus?
+  toStatus          TaskStatus
+
+  changedById       String 
+  changedBy         User          @relation("ChangedBy", fields: [changedById], references: [id])
+
+  note              String?
+  createdAt         DateTime      @default(now())
+
+  @@index([taskId])
+}
