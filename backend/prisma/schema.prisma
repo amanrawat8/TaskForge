@@ -69,7 +69,7 @@ model ServiceType {
   id               String       @id     @default(uuid())
   name             String       @unique
   isRecurring      Boolean
-  recurrenceunit   RecurrenceUnit?
+  recurrenceUnit   RecurrenceUnit?
 
   taskTemplates    TaskTemplate[]
   engagements      Engagement[] 

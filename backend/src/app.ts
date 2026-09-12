@@ -6,6 +6,8 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { userRouter } from "./modules/users/user.routes.js";
 import { clientRouter } from "./modules/clients/client.routes.js";
+import { serviceTypeRouter } from "./modules/serviceTypes/service-type.routes.js";
+import { engagementRouter } from "./modules/engagements/engagement.routes.js";
 
 
 const app = express();
@@ -27,12 +29,20 @@ app.get("/api/health", async (req, res) => {
 
 
 app.use("/api/auth", authRouter);
+
 app.use("/api/users", userRouter);
+
 app.use("/api/clients", clientRouter);
 
+app.use("/api/service-types", serviceTypeRouter);
+
+app.use("/api/engagements", engagementRouter);
+
+
+
+
+
 app.use(errorHandler);
-
-
 
 
 app.listen(PORT, () => {
