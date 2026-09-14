@@ -8,6 +8,8 @@ import { userRouter } from "./modules/users/user.routes.js";
 import { clientRouter } from "./modules/clients/client.routes.js";
 import { serviceTypeRouter } from "./modules/serviceTypes/service-type.routes.js";
 import { engagementRouter } from "./modules/engagements/engagement.routes.js";
+import { taskRouter } from "./modules/tasks/task.routes.js";
+import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 
 
 const app = express();
@@ -38,6 +40,9 @@ app.use("/api/service-types", serviceTypeRouter);
 
 app.use("/api/engagements", engagementRouter);
 
+app.use("/api/tasks", taskRouter);
+
+app.use("/api/dashboard", dashboardRouter);
 
 
 

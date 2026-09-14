@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../../middleware/auth.middleware.js";
 import { validate } from "../../middleware/validate.js";
 import { createEngagementSchema } from "./engagement.schema.js";
-import { createEngagementHandler, getEngagementHandler, listEngagementsHandler } from "./engagement.controller.js";
+import { createEngagementHandler, generateNextEngagementHandler, getEngagementHandler, listEngagementsHandler } from "./engagement.controller.js";
 
 
 
@@ -15,3 +15,5 @@ engagementRouter.post("/", requireRole("ADMIN", "MANAGER"), validate(createEngag
 engagementRouter.get("/", requireRole("ADMIN", "MANAGER"), listEngagementsHandler);
 
 engagementRouter.get("/:id", requireRole("ADMIN", "MANAGER"), getEngagementHandler);
+
+engagementRouter.post("/:id/generate-next", requireRole("ADMIN", "MANAGER"), generateNextEngagementHandler);
