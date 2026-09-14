@@ -12,9 +12,7 @@ import { taskRouter } from "./modules/tasks/task.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 
 
-const app = express();
-const PORT = process.env.PORT || 8001;
-
+export const app = express();
 
 app.use(cors());
 app.use(express.json());
@@ -48,8 +46,3 @@ app.use("/api/dashboard", dashboardRouter);
 
 
 app.use(errorHandler);
-
-
-app.listen(PORT, () => {
-    console.log(`Server is running on port: ${PORT}`)
-});

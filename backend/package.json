@@ -4,12 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/app.ts",
+    "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "generate": "prisma generate",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "postinstall": "prisma skills sync || exit 0"
   },
   "keywords": [],
@@ -35,9 +35,12 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.2",
     "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
     "nodemon": "^3.1.14",
     "prisma": "^7.10.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   }
 }
