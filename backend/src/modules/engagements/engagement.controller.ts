@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { createEngagement, getEngagementById, listEngagements } from "./engagement.service.js";
+import { createEngagement, generateNextEngagement, getEngagementById, listEngagements } from "./engagement.service.js";
 
 
 
@@ -29,4 +29,10 @@ export async function getEngagementHandler(req: Request, res: Response) {
         success: true,
         engagement
     })
+}
+
+
+export async function generateNextEngagementHandler(req: Request, res: Response) {
+  const engagement = await generateNextEngagement(req.params.id as string);
+  res.status(201).json({ success: true, engagement });
 }
