@@ -2,11 +2,12 @@
 
 ## Architecture
 
-- **Frontend**: React (planned, not yet implemented at time of writing — the backend was prioritized, per the assignment's own weighting of Backend Engineering (35%) + Database & Domain Design (20%) + Testing (15%) = 70% of the grade, versus Frontend & UX at 10%).
+- **Frontend**: React 19 + Vite, TanStack Query for server state, React Router for routing, React Hook Form + Zod for form validation, shadcn/ui + Tailwind for components. Organized by feature (`features/auth`, `features/tasks`, `features/engagements`, etc.), each folder holding its pages, TanStack Query hooks, and any feature-local components; a thin `api/*.api.ts` layer per resource wraps the Axios client.
 - **Backend**: Node.js + TypeScript + Express 5. Organized as one module per resource (`auth`, `users`, `clients`, `serviceTypes`, `engagements`, `tasks`, `dashboard`), each with a `schema` (Zod), `service` (business logic + Prisma calls), `controller` (HTTP glue), and `routes` (Express `Router` + middleware chain) file.
 - **Database**: PostgreSQL, hosted on Neon. Accessed through Prisma ORM 7, which (unlike Prisma 6) requires an explicit SQL driver adapter (`@prisma/adapter-pg`) rather than a bundled query engine binary.
-- **Authentication**: Stateless JWT (HS256), issued on login, verified on every protected request — no server-side session store.
-- **Deployment**: Not yet deployed. Intended path: API to Render/Railway, frontend to Vercel, both pointed at the same Neon database.
+- **Authentication**: Stateless JWT (HS256), issued on login, verified on every protected request — no server-side session store. The frontend stores the token/session client-side and attaches it as `Authorization: Bearer <token>` on every API call.
+- **Deployment**: Backend on Render (Web Service, builds via `npx prisma generate && npm run build`, runs `npx prisma migrate deploy && npm start`), frontend on Vercel (Vite build, `vercel.json` rewrites all paths to `index.html` for client-side routing), both pointed at the same Neon database.
+  - Live: frontend at `https://task-forge-puce.vercel.app`, API at `https://taskforge-pm9p.onrender.com/api`.
 
 ## Database Schema / ERD
 
@@ -87,6 +88,12 @@ Key constraints:
 - **Business logic**: lives entirely in `*.service.ts` files — e.g. period normalization, transaction boundaries, and workflow-transition rules never appear in a controller or route file.
 - **Error handling**: a single `ApiError` class (`statusCode` + `message`) and one `errorHandler` Express middleware registered last in the chain. Any route handler can `throw new ApiError(...)`; Express 5's native support for async rejection forwarding means no `try/catch`/wrapper boilerplate is needed per route. Prisma's unique-constraint violations (`P2002`) are caught centrally via an `isUniqueConstraintError` helper and translated into clean `409` responses.
 
+## Frontend Design
+
+- **Routing/guarding**: `RequireAuth` redirects unauthenticated users to `/login`; a nested `RequireRole` route wrapper hides Admin/Manager-only pages (Clients, Service Types, Engagements, Users) from Team Members client-side. This is purely a UX convenience — every one of those routes' underlying API calls is still independently authorized server-side by `requireRole`/the service-layer checks, so hiding a link client-side is not a security boundary.
+- **Mirrored workflow rules for UX only**: `features/tasks/task-status.ts` duplicates the backend's `TRANSITIONS`/`REVIEW_TRANSITIONS`/self-approval logic from `task.service.ts`, purely so the UI only ever offers buttons for transitions the API will actually accept (no dead-end clicks). The file carries an explicit comment noting the backend remains the source of truth and will still reject anything invalid — the frontend copy is a convenience, not a trust boundary, and could drift or be bypassed entirely without compromising correctness.
+- **Server state**: TanStack Query owns all server data (caching, invalidation on mutation, loading/error states) rather than hand-rolled `useEffect`/`useState` data fetching.
+
 ## Authentication & Authorization
 
 - **Authentication**: `POST /api/auth/login` verifies the password with `bcrypt.compare` against the stored hash, then issues a JWT (`{ sub: userId, role }`, 8h expiry) signed with `JWT_SECRET`.
@@ -146,3 +153,4 @@ Test setup reuses the real service functions (`createUser`, `createClient`, `cre
 1. **Vitest over Jest**: the project is ESM-first (`"type": "module"`) using `tsx`, not `ts-node`. Jest's ESM support requires nontrivial extra configuration (`extensionsToTreatAsEsm`, `useESM`, module name mapping for `.js` import extensions) that's a known friction point in exactly this setup; Vitest supports ESM/TS natively with a near-identical API, so it was the pragmatic choice.
 2. **Tests run against the real dev database, not an isolated test database**: given the assignment's time budget, provisioning a dedicated Neon branch per test run was judged disproportionate. The mitigation is that every test creates uniquely-suffixed, self-contained records and cleans them up afterward, so test runs don't interfere with seed/demo data or each other. A larger system would use a dedicated ephemeral database per test run.
 3. **A generic `Task` history table instead of per-entity audit logging**: `TaskHistory` is purpose-built for task status transitions (typed `fromStatus`/`toStatus` columns) rather than a fully generic audit log across all entities. This trades general-purpose auditability for a simpler, directly queryable transition history on the one entity (`Task`) where the assignment explicitly requires workflow tracking.
+4. **Duplicating workflow-transition rules in the frontend**: `task-status.ts` re-implements the backend's transition/self-approval logic purely to drive which buttons the UI shows. This risks the two copies drifting out of sync over time, but was chosen over fetching "what can I do next" from the API on every render, since the rule set is small and static, and the backend independently re-validates every transition regardless of what the frontend offered.
