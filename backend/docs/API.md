@@ -291,9 +291,237 @@ Get one service type with its task templates.
 
 ---
 
-## Not yet implemented
+## Engagements
 
-These are planned but don't exist yet — listed here so this doc stays a complete map of the API as it grows:
-- Engagements (`/api/engagements`) — creation, task generation from templates, recurring generation
-- Tasks (`/api/tasks`) — status workflow transitions, assignment, review/approval
-- Dashboard (`/api/dashboard`)
+Manager/Admin create engagements (which generate tasks from the service type's templates) and generate the next period for recurring ones.
+
+### `POST /api/engagements`
+Create an engagement. Tasks are generated automatically from the service type's task templates, inside one transaction.
+
+**Auth required:** Yes — role `ADMIN` or `MANAGER`
+
+**Request body**
+```json
+{
+  "clientId": "a6a20572-957b-4df2-9afb-061a8095e32b",
+  "serviceTypeId": "2e70a506-9b27-45fd-81c5-b5cf38839c91",
+  "periodStart": "2026-09-15"
+}
+```
+| Field | Type | Rules |
+|---|---|---|
+| clientId | string | valid UUID, must reference an existing client |
+| serviceTypeId | string | valid UUID, must reference an existing service type |
+| periodStart | string | ISO date — **any** date within the desired period; the server normalizes it to the canonical `periodStart`/`periodEnd` for the service type's recurrence unit (e.g. any day in September → `2026-09-01`–`2026-09-30` for a monthly service; a single day for a one-time service) |
+
+**Success response** `201`
+```json
+{
+  "success": true,
+  "engagement": {
+    "id": "5b3a0004-...",
+    "clientId": "a6a20572-...",
+    "serviceTypeId": "2e70a506-...",
+    "periodStart": "2026-09-01T00:00:00.000Z",
+    "periodEnd": "2026-09-30T00:00:00.000Z",
+    "status": "ACTIVE",
+    "createdAt": "2026-09-12T18:55:39.476Z",
+    "client": { "id": "...", "name": "Acme Corp", "createdAt": "..." },
+    "serviceType": { "id": "...", "name": "Monthly GST Compliance", "isRecurring": true, "recurrenceUnit": "MONTHLY" },
+    "tasks": [
+      {
+        "id": "cef7995c-...",
+        "engagementId": "5b3a0004-...",
+        "templateId": "694b1a6a-...",
+        "title": "Collect invoices from client",
+        "status": "NOT_STARTED",
+        "assignedToId": null,
+        "reviewedById": null,
+        "dueDate": "2026-09-06T00:00:00.000Z",
+        "createdAt": "...",
+        "updatedAt": "..."
+      }
+    ]
+  }
+}
+```
+
+**Errors**
+- `400` — validation failure (bad UUID, invalid date)
+- `401` — no/invalid token
+- `403` — role is `TEAM_MEMBER`
+- `404` — `{ "message": "Service type not found" }` or `{ "message": "Client not found" }`
+- `409` — `{ "message": "An engagement for this client, service, and period already exists" }` — this fires even if a different day within the same normalized period is submitted
+
+### `GET /api/engagements`
+List engagements, optionally filtered by client, each with its client/service type/tasks.
+
+**Auth required:** Yes — role `ADMIN` or `MANAGER`
+
+**Query params**
+| Param | Type | Required |
+|---|---|---|
+| clientId | string | no — omit to list all |
+
+**Success response** `200` — `{ "success": true, "engagements": [ ...same shape as create response... ] }`
+
+**Errors**
+- `401` — no/invalid token
+- `403` — role is `TEAM_MEMBER`
+
+### `GET /api/engagements/:id`
+Get one engagement with its client/service type/tasks.
+
+**Auth required:** Yes — role `ADMIN` or `MANAGER`
+
+**Success response** `200` — same shape as one item from the list above.
+
+**Errors**
+- `401` — no/invalid token
+- `403` — role is `TEAM_MEMBER`
+- `404` — `{ "message": "Engagement not found" }`
+
+### `POST /api/engagements/:id/generate-next`
+Generate the next period's engagement (and its tasks) for a recurring engagement. No request body.
+
+**Auth required:** Yes — role `ADMIN` or `MANAGER`
+
+**Success response** `201` — same shape as the create response, for the newly generated next-period engagement.
+
+**Errors**
+- `400` — `{ "message": "Service type is not recurring — cannot generate a next period" }`
+- `401` — no/invalid token
+- `403` — role is `TEAM_MEMBER`
+- `404` — `{ "message": "Engagement not found" }`
+- `409` — the next period's engagement already exists (e.g. calling this twice on the same source engagement)
+
+---
+
+## Tasks
+
+Team Members view and update their own tasks; Manager/Admin can view all tasks, assign/reassign, set deadlines, and approve or request changes.
+
+### `GET /api/tasks`
+List tasks. **Team Members always see only their own tasks — this is enforced server-side and cannot be overridden by query params.** Admin/Manager see all tasks, optionally filtered.
+
+**Auth required:** Yes — any role
+
+**Query params** (ignored for `TEAM_MEMBER` role except `status`)
+| Param | Type |
+|---|---|
+| status | one of the 6 task statuses |
+| assignedToId | string (UUID) — Admin/Manager only |
+
+**Success response** `200`
+```json
+{
+  "success": true,
+  "tasks": [
+    {
+      "id": "...",
+      "engagementId": "...",
+      "templateId": "...",
+      "title": "Collect invoices from client",
+      "status": "IN_PROGRESS",
+      "assignedToId": "...",
+      "reviewedById": null,
+      "dueDate": "2026-09-06T00:00:00.000Z",
+      "createdAt": "...",
+      "updatedAt": "...",
+      "engagement": { "client": { "...": "..." }, "serviceType": { "...": "..." } },
+      "assignedTo": { "id": "...", "name": "...", "email": "...", "role": "TEAM_MEMBER" },
+      "reviewedBy": null
+    }
+  ]
+}
+```
+
+**Errors**
+- `401` — no/invalid token
+
+### `GET /api/tasks/:id`
+Get one task. Team Members get `403` if the task isn't assigned to them.
+
+**Auth required:** Yes — any role
+
+**Success response** `200` — same task shape as above, plus a nested `history` array (`TaskHistory` rows).
+
+**Errors**
+- `401` — no/invalid token
+- `403` — `{ "message": "You can only view your own tasks" }` (Team Member, not the assignee)
+- `404` — `{ "message": "Task not found" }`
+
+### `PATCH /api/tasks/:id/status`
+Move a task through the workflow. No role restriction at the route level — permission depends on the specific task and transition (enforced in the service layer).
+
+**Auth required:** Yes — any role, but:
+- Worker transitions (`NOT_STARTED→IN_PROGRESS`, `IN_PROGRESS→READY_FOR_REVIEW`, `IN_PROGRESS↔WAITING_FOR_CLIENT`, `CHANGES_REQUESTED→IN_PROGRESS`): the task's assignee, or Manager/Admin
+- Review transitions (`READY_FOR_REVIEW→COMPLETED`, `READY_FOR_REVIEW→CHANGES_REQUESTED`): Manager/Admin only, and never the task's own assignee
+
+**Request body**
+```json
+{ "status": "IN_PROGRESS", "note": "Starting this now" }
+```
+| Field | Type | Rules |
+|---|---|---|
+| status | string | one of `NOT_STARTED`, `IN_PROGRESS`, `READY_FOR_REVIEW`, `CHANGES_REQUESTED`, `WAITING_FOR_CLIENT`, `COMPLETED` |
+| note | string | optional, stored on the `TaskHistory` row |
+
+**Success response** `200` — `{ "success": true, "task": { ...updated task... } }`. A review transition also sets `reviewedById` to the actor's id.
+
+**Errors**
+- `400` — `{ "message": "Cannot transition from X to Y" }` (not a legal transition from the task's current status)
+- `401` — no/invalid token
+- `403` — `{ "message": "You can only update your own tasks" }`, `{ "message": "Only a manager can approve or request changes" }`, or `{ "message": "You cannot review your own work" }`
+- `404` — `{ "message": "Task not found" }`
+
+### `PATCH /api/tasks/:id`
+Assign/reassign a task and/or set its due date.
+
+**Auth required:** Yes — role `ADMIN` or `MANAGER`
+
+**Request body** (at least one field required)
+```json
+{ "assignedToId": "e1a2...", "dueDate": "2026-09-20" }
+```
+
+**Success response** `200` — `{ "success": true, "task": { ...updated task... } }`
+
+**Errors**
+- `400` — neither `assignedToId` nor `dueDate` provided
+- `401` — no/invalid token
+- `403` — role is `TEAM_MEMBER`
+- `404` — `{ "message": "Task not found" }` or `{ "message": "Assignee not found" }`
+
+---
+
+## Dashboard
+
+### `GET /api/dashboard`
+Five task counts, scoped to the caller: Team Members see only their own tasks' counts; Admin/Manager see counts across everyone.
+
+**Auth required:** Yes — any role
+
+**Success response** `200`
+```json
+{
+  "success": true,
+  "dashboard": {
+    "openTasks": 12,
+    "overdueTasks": 3,
+    "dueTodayTasks": 1,
+    "waitingForClientTasks": 2,
+    "waitingForReviewTasks": 4
+  }
+}
+```
+| Field | Meaning |
+|---|---|
+| openTasks | status is not `COMPLETED` |
+| overdueTasks | not completed, `dueDate` before today |
+| dueTodayTasks | not completed, `dueDate` is today |
+| waitingForClientTasks | status is `WAITING_FOR_CLIENT` |
+| waitingForReviewTasks | status is `READY_FOR_REVIEW` |
+
+**Errors**
+- `401` — no/invalid token
